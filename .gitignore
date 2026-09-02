@@ -1,0 +1,13 @@
+# The pokemon-tcg-data clone build_index.dart reads from -- re-fetched
+# fresh by the CI workflow every run, never committed here.
+/pokemon-tcg-data/
+
+# build_index.dart's output -- published to GitHub Pages by the CI
+# workflow, never committed to this repo's own history (that's what
+# GitHub Pages' "deploy from Actions artifact" does under the hood
+# instead of a checked-in gh-pages branch).
+/dist/
+
+.dart_tool/
+.packages
+pubspec.lock

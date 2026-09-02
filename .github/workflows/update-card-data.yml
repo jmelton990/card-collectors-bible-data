@@ -1,0 +1,108 @@
+name: Update card data
+
+# Two ways this runs:
+#   1. On a schedule (below) -- pokemon-tcg-data has no fixed release
+#      calendar, so this is just a reasonable "check periodically"
+#      cadence, not tied to Pokémon's actual set-release schedule.
+#   2. Manually (Actions tab -> "Update card data" -> Run workflow) --
+#      use this right after a new set actually drops rather than
+#      waiting for the schedule.
+#
+# Either way, the app itself only ever finds out there's something
+# new the next time it calls IndexUpdateService.checkAndApplyUpdate()
+# (every launch, fire-and-forget) and sees this workflow's published
+# index_manifest.json carrying a newer "version" than what it already
+# has -- nothing here pushes anything TO installed apps.
+on:
+  schedule:
+    - cron: '0 13 * * 1' # Mondays, 13:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one publish in flight at a time. A run already publishing is
+# left to finish rather than cancelled -- this is a multi-minute,
+# network- and CPU-heavy job (build_index.dart downloads and hashes
+# every card image), not worth throwing away partway through.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Install SQLite runtime (sqflite_common_ffi needs libsqlite3 present)
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+
+      - name: Fetch pokemon-tcg-data (shallow -- only the latest snapshot matters here)
+        run: git clone --depth 1 https://github.com/PokemonTCG/pokemon-tcg-data.git
+
+      - name: Install Dart dependencies
+        run: dart pub get
+
+      # Pokémon only for now -- this is the one game with a working
+      # build_index pipeline today (see tool/build_index.dart's own
+      # doc comment). Adding another game later (Magic/Yu-Gi-Oh/
+      # Lorcana) means adding another `dart run tool/build_index_X.dart
+      # --data-dir ... --out-dir dist` line here before the "did it
+      # change" check below -- build_index.dart already writes one
+      # combined card_index.db/.json across every game that's been
+      # run against it (each run only touches its own --game's rows),
+      # so nothing else about this workflow needs to change.
+      - name: Build the Pokémon card index
+        run: dart run tool/build_index.dart --data-dir pokemon-tcg-data --game pokemon --out-dir dist
+
+      # Skip publishing (and skip forcing every installed app to
+      # re-download an identical dataset) when pokemon-tcg-data hasn't
+      # actually changed since the last publish. Compares card_count
+      # rather than the full file, which is enough to catch "a new
+      # set was added" -- the one case this whole pipeline exists for
+      # -- without needing a byte-for-byte diff. Falls back to "-1" on
+      # the very first run ever (nothing published yet, so the fetch
+      # 404s), which correctly never equals a real card_count and so
+      # always publishes that first run.
+      #
+      # ONE-TIME SETUP: set the repository variable
+      # PUBLISHED_MANIFEST_URL (Settings -> Secrets and variables ->
+      # Actions -> Variables) to this repo's actual Pages URL once
+      # you know it, e.g.
+      # https://<your-username>.github.io/<this-repo-name>/index_manifest.json
+      - name: Check whether the dataset actually changed
+        id: diff
+        run: |
+          NEW_COUNT=$(jq '.card_count' dist/index_manifest.json)
+          OLD_COUNT=$(curl -sf "${{ vars.PUBLISHED_MANIFEST_URL }}" | jq '.card_count' 2>/dev/null || echo "-1")
+          echo "New card_count: $NEW_COUNT -- previously published: $OLD_COUNT"
+          if [ "$NEW_COUNT" = "$OLD_COUNT" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure Pages
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        if: steps.diff.outputs.changed == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

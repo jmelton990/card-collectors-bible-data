@@ -1,0 +1,25 @@
+name: card_collectors_bible_data
+description: >
+  Standalone data-pipeline for Card Collector's Bible: converts
+  PokemonTCG/pokemon-tcg-data (a public, openly-licensed community
+  dataset) into the card_index.db / card_index.json / index_manifest.json
+  files the app downloads on first run and checks periodically for
+  updates. This repo is deliberately separate from the app's own
+  source -- it contains only this generic ETL script, published here
+  (and, via GitHub Pages, its output) so the app can pull fresh card
+  data without an app-store release every time a new set is added to
+  pokemon-tcg-data. See README.md and .github/workflows/update-card-data.yml.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  http: ^1.2.1
+  image: ^4.1.7
+  path: ^1.9.0
+  sqflite_common_ffi: ^2.3.3
+
+dev_dependencies:
+  lints: ^3.0.0
