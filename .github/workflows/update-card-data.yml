@@ -17,6 +17,10 @@ on:
   schedule:
     - cron: '0 13 * * 1' # Mondays, 13:00 UTC
   workflow_dispatch: {}
+  # CLIP image-matching data pushed by build_clip_index.ps1 -Publish
+  push:
+    paths:
+      - 'clip/**'
 
 permissions:
   contents: read
@@ -80,9 +84,18 @@ jobs:
       # Actions -> Variables) to this repo's actual Pages URL once
       # you know it, e.g.
       # https://<your-username>.github.io/<this-repo-name>/index_manifest.json
+      - name: Include CLIP image-matching data
+        run: |
+          if [ -d clip ]; then cp -r clip dist/clip; echo "Included clip/"; fi
+
       - name: Check whether the dataset actually changed
         id: diff
         run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "CLIP data pushed -- redeploying."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           NEW_COUNT=$(jq '.card_count' dist/index_manifest.json)
           OLD_COUNT=$(curl -sf "${{ vars.PUBLISHED_MANIFEST_URL }}" | jq '.card_count' 2>/dev/null || echo "-1")
           echo "New card_count: $NEW_COUNT -- previously published: $OLD_COUNT"
