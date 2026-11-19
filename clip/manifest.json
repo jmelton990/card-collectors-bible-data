@@ -1,9 +1,14 @@
 {
-  "version": 1795008154943,
+  "version": 1795094856538,
   "model": "ViT-B-32-laion2b_s34b_b79k-int8-squash224",
   "dim": 512,
   "modelFile": "clip_visual_int8.onnx",
   "games": {
+    "fab": {
+      "bin": "clip_fab.bin",
+      "ids": "clip_fab_ids.txt",
+      "count": 9331
+    },
     "pokemon": {
       "bin": "clip_pokemon.bin",
       "ids": "clip_pokemon_ids.txt",
